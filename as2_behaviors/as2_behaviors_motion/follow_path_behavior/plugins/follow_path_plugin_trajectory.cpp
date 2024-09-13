@@ -46,6 +46,7 @@
 #include "as2_msgs/msg/pose_with_id.hpp"
 #include "as2_msgs/msg/yaw_mode.hpp"
 
+#include <action_msgs/srv/cancel_goal.hpp>
 #include <geometry_msgs/msg/point.hpp>
 #include <std_msgs/msg/header.hpp>
 #include <std_srvs/srv/trigger.hpp>
@@ -79,18 +80,21 @@ public:
       RCLCPP_ERROR(node_ptr_->get_logger(), "Trajectory generator action server not available");
       return false;
     }
-    RCLCPP_INFO(node_ptr_->get_logger(), "Trajectory generator action server available");
+    RCLCPP_DEBUG(node_ptr_->get_logger(), "Trajectory generator action server available");
 
     as2_msgs::action::GeneratePolynomialTrajectory::Goal traj_generator_goal =
         followPathGoalToTrajectoryGeneratorGoal(_goal);
 
-    RCLCPP_INFO(node_ptr_->get_logger(), "Follow path with speed: %f",
-                traj_generator_goal.max_speed);
+    RCLCPP_INFO(node_ptr_->get_logger(), "New trajectory of %d points",
+                traj_generator_goal.path.size());
 
-    RCLCPP_INFO(node_ptr_->get_logger(), "Follow path to positions:");
+    RCLCPP_DEBUG(node_ptr_->get_logger(), "Follow path with speed: %f",
+                 traj_generator_goal.max_speed);
+
+    RCLCPP_DEBUG(node_ptr_->get_logger(), "Follow path to positions:");
     for (auto &point : traj_generator_goal.path) {
-      RCLCPP_INFO(node_ptr_->get_logger(), "  x: %f, y: %f, z: %f", point.pose.position.x,
-                  point.pose.position.y, point.pose.position.z);
+      RCLCPP_DEBUG(node_ptr_->get_logger(), "  x: %f, y: %f, z: %f", point.pose.position.x,
+                   point.pose.position.y, point.pose.position.z);
     }
 
     traj_gen_goal_handle_future_ =
@@ -126,9 +130,23 @@ public:
 
   bool own_deactivate(const std::shared_ptr<std::string> &message) override {
     RCLCPP_INFO(node_ptr_->get_logger(), "Follow path cancel");
-    // TODO: cancel trajectory generator
-    traj_gen_client_->async_cancel_goal(traj_gen_goal_handle_future_.get());
-    return false;
+    auto cancel_response_future =
+        traj_gen_client_->async_cancel_goal(traj_gen_goal_handle_future_.get());
+    return true;
+
+    // TODO: check cancel trajectory generator response
+    // auto future_status = cancel_response_future.wait_for(std::chrono::seconds(3));
+    // if (future_status != std::future_status::ready) {
+    //   RCLCPP_ERROR(node_ptr_->get_logger(),
+    //                "Cancel response from Trajectory Generator not received");
+    //   return false;
+    // }
+    // auto cancel_response = cancel_response_future.get();
+    // if (cancel_response->return_code != action_msgs::srv::CancelGoal::Response::ERROR_NONE) {
+    //   RCLCPP_ERROR(node_ptr_->get_logger(), "Cancel request to Trajectory Generator failed");
+    //   return false;
+    // }
+    // return true;
   }
 
   bool own_pause(const std::shared_ptr<std::string> &message) override {
@@ -182,7 +200,7 @@ public:
       }
     }
 
-    if (traj_gen_result_received_) {
+    if (traj_gen_result_received_ && last_reached()) {
       RCLCPP_INFO(node_ptr_->get_logger(), "Trajectory generator result received: %d",
                   traj_gen_result_);
       result_.follow_path_success = traj_gen_result_;
@@ -197,8 +215,8 @@ public:
 
     // Waiting for result
     auto &clk = *node_ptr_->get_clock();
-    RCLCPP_INFO_THROTTLE(node_ptr_->get_logger(), clk, 5000,
-                         "Waiting for trajectory generator result");
+    RCLCPP_DEBUG_THROTTLE(node_ptr_->get_logger(), clk, 5000,
+                          "Waiting for trajectory generator result");
     return as2_behavior::ExecutionStatus::RUNNING;
   }
 
@@ -211,10 +229,10 @@ public:
       GoalHandleTrajectoryGenerator::SharedPtr,
       const std::shared_ptr<const TrajectoryGeneratorAction::Feedback> feedback) {
     if (feedback->next_waypoint_id != feedback_.next_waypoint_id) {
-      RCLCPP_INFO(node_ptr_->get_logger(), "Next waypoint id: %s",
-                  feedback->next_waypoint_id.c_str());
-      RCLCPP_INFO(node_ptr_->get_logger(), "Remaining waypoints: %d",
-                  feedback->remaining_waypoints);
+      RCLCPP_DEBUG(node_ptr_->get_logger(), "Next waypoint id: %s",
+                   feedback->next_waypoint_id.c_str());
+      RCLCPP_DEBUG(node_ptr_->get_logger(), "Remaining waypoints: %d",
+                   feedback->remaining_waypoints);
       // Update target position
       for (auto waypoint : goal_.path) {
         if (waypoint.id == feedback->next_waypoint_id) {
@@ -260,6 +278,14 @@ private:
     traj_generator_goal.path      = _goal.path;
 
     return traj_generator_goal;
+  }
+
+  bool last_reached() {
+    if (feedback_.remaining_waypoints == 0 &&
+        fabs(feedback_.actual_distance_to_next_waypoint) < params_.follow_path_threshold) {
+      return true;
+    }
+    return false;
   }
 
 };  // Plugin class

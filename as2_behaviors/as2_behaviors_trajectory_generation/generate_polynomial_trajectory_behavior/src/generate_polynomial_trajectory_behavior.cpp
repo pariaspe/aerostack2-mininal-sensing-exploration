@@ -86,7 +86,6 @@ void DynamicPolynomialTrajectoryGenerator::stateCallback(
                                    tf2_ros::fromMsg(_twist_msg->header.stamp));
 
     if (!has_odom_) {
-      RCLCPP_INFO(this->get_logger(), "State callback working");
       has_odom_ = true;
     }
 
@@ -165,7 +164,7 @@ bool DynamicPolynomialTrajectoryGenerator::goalToDynamicWaypoint(
 bool DynamicPolynomialTrajectoryGenerator::on_activate(
     std::shared_ptr<const as2_msgs::action::GeneratePolynomialTrajectory::Goal>
         goal) {
-  RCLCPP_INFO(this->get_logger(), "TrajectoryGenerator on activate");
+  RCLCPP_DEBUG(this->get_logger(), "TrajectoryGenerator on activate");
 
   if (!has_odom_) {
     RCLCPP_ERROR(this->get_logger(), "No odometry information available");
@@ -175,9 +174,9 @@ bool DynamicPolynomialTrajectoryGenerator::on_activate(
 
   // Print goal path
   for (auto waypoint : goal->path) {
-    RCLCPP_INFO(this->get_logger(), "Waypoint ID: %s, position : [%f, %f, %f]",
-                waypoint.id.c_str(), waypoint.pose.position.x,
-                waypoint.pose.position.y, waypoint.pose.position.z);
+    RCLCPP_DEBUG(this->get_logger(), "Waypoint ID: %s, position : [%f, %f, %f]",
+                 waypoint.id.c_str(), waypoint.pose.position.x,
+                 waypoint.pose.position.y, waypoint.pose.position.z);
   }
 
   // Generate vector of waypoints for trajectory generator, from goal to
@@ -510,7 +509,7 @@ void DynamicPolynomialTrajectoryGenerator::plotTrajectoryThread() {
   path_msg.header.frame_id = desired_frame_id_;
   path_msg.header.stamp = time_stamp;
 
-  RCLCPP_INFO(this->get_logger(), "DEBUG: Plotting trajectory");
+  RCLCPP_DEBUG(this->get_logger(), "DEBUG: Plotting trajectory");
   path_pub_->publish(path_msg);
 }
 
