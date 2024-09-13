@@ -40,68 +40,13 @@ import os
 import json
 from typing import List
 from ament_index_python.packages import get_package_share_directory
+from launch_ros.actions import Node
 from launch import LaunchDescription, LaunchContext
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, \
-    RegisterEventHandler
-from launch.event_handlers import OnProcessExit
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch.actions import ExecuteProcess, EmitEvent
-from launch.events import Shutdown
-from launch_ros.actions import Node
 
 from ign_assets.world import World, spawn_args
-
-
-def simulation(world_name: str, gui_config: str = '', headless: bool = False,
-               verbose: bool = False, run_on_start: bool = True):
-    """Open Gazebo simulator
-    """
-    ign_args = []
-    if gui_config != '':
-        ign_args.append(f'--gui-config {gui_config}')
-    if verbose:
-        ign_args.append('-v 4')
-    if run_on_start:
-        ign_args.append('-r')
-    if headless:
-        ign_args.append('-s')
-
-    if world_name.split('.')[-1] == 'sdf':
-        ign_args.append(world_name)
-    else:
-        ign_args.append(f'{world_name}.sdf')
-
-    # ros2 launch ros_gz_sim ign_gazebo.launch.py ign_args:="empty.sdf"
-    ign_gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory('ros_gz_sim'), 'launch'),
-            '/gz_sim.launch.py']),
-        launch_arguments={'gz_args': ' '.join(ign_args)}.items())
-
-    # Register handler for shutting down ros launch when ign gazebo process exits
-    # monitor_sim.py will run until it can not find the ign gazebo process.
-    # Once monitor_sim.py exits, a process exit event is triggered which causes the
-    # handler to emit a Shutdown event
-
-    path = os.path.join(get_package_share_directory('as2_ign_gazebo_assets'), 'launch',
-                        'monitor_sim.py')
-    monitor_sim_proc = ExecuteProcess(
-        cmd=['python3', path],
-        name='monitor_sim',
-        output='screen',
-    )
-    sim_exit_event_handler = RegisterEventHandler(
-        OnProcessExit(
-            target_action=monitor_sim_proc,
-            on_exit=[
-                EmitEvent(event=Shutdown(reason='Simulation ended'))
-            ]
-        )
-    )
-
-    # return [ign_gazebo]
-    return [ign_gazebo, monitor_sim_proc, sim_exit_event_handler]
 
 
 def spawn(world: World) -> List[Node]:
@@ -148,35 +93,20 @@ def object_bridges():
     return [object_bridges_]
 
 
-def launch_simulation(context: LaunchContext):
+def launch_spawn(context: LaunchContext):
     """Return processes needed for launching the simulation.
     Simulator + Spawning Models + Bridges.
     """
     config_file = LaunchConfiguration(
         'simulation_config_file').perform(context)
-    gui_config_file = LaunchConfiguration('gui_config_file').perform(context)
-    use_sim_time = LaunchConfiguration('use_sim_time').perform(context)
-    use_sim_time = use_sim_time.lower() in ['true', 't', 'yes', 'y', '1']
-    headless = LaunchConfiguration('headless').perform(context)
-    headless = headless.lower() in ['true', 't', 'yes', 'y', '1']
-    verbose = LaunchConfiguration('verbose').perform(context)
-    verbose = verbose.lower() in ['true', 't', 'yes', 'y', '1']
-    run_on_start = LaunchConfiguration('run_on_start').perform(context)
-    run_on_start = run_on_start.lower() in ['true', 't', 'yes', 'y', '1']
 
     with open(config_file, 'r', encoding='utf-8') as stream:
         config = json.load(stream)
         world = World(**config)
 
     launch_processes = []
-    # If there is a world file created by jinja we use that one,
-    # otherwise we use the default world model
-    world_to_load = world.world_path if hasattr(
-        world, 'world_path') else world.world_name
-    launch_processes.extend(simulation(
-        world_to_load, gui_config_file, headless, verbose, run_on_start))
-    # launch_processes.extend(spawn(world))
-    # launch_processes.extend(world_bridges() + object_bridges())
+    launch_processes.extend(spawn(world))
+    launch_processes.extend(world_bridges() + object_bridges())
     return launch_processes
 
 
@@ -189,29 +119,10 @@ def generate_launch_description():
             'simulation_config_file',
             description='Launch config file (JSON or YAML format).'),
         DeclareLaunchArgument(
-            'gui_config_file',
-            default_value='',
-            description='GUI config file.'),
-        DeclareLaunchArgument(
             'use_sim_time',
             default_value='true',
             choices=['true', 'false'],
             description='Deactivates clock bridge and object publishes tf in sys clock time.'),
-        DeclareLaunchArgument(
-            'headless',
-            default_value='false',
-            choices=['true', 'false'],
-            description='Launch in headless mode (only ign server).'),
-        DeclareLaunchArgument(
-            'verbose',
-            default_value='false',
-            choices=['true', 'false'],
-            description='Launch in verbose mode.'),
-        DeclareLaunchArgument(
-            'run_on_start',
-            default_value='true',
-            choices=['true', 'false'],
-            description='Run simulation on start.'),
         # Launch processes
-        OpaqueFunction(function=launch_simulation),
+        OpaqueFunction(function=launch_spawn),
     ])
