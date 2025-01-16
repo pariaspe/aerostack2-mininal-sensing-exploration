@@ -42,7 +42,7 @@
 #include "as2_core/node.hpp"
 #include "as2_motion_reference_handlers/hover_motion.hpp"
 #include "as2_msgs/action/land.hpp"
-#include "as2_msgs/action/takeoff.hpp"
+#include "as2_msgs/action/take_off.hpp"
 #include "as2_msgs/msg/alert_event.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rviz_common/panel.hpp"
@@ -109,7 +109,7 @@ protected:
   std::shared_ptr<rclcpp::Node> node2_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr arming_client_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr offboard_client_;
-  rclcpp_action::Client<as2_msgs::action::Takeoff>::SharedPtr takeoff_client_;
+  rclcpp_action::Client<as2_msgs::action::TakeOff>::SharedPtr takeoff_client_;
   rclcpp_action::Client<as2_msgs::action::Land>::SharedPtr land_client_;
   rclcpp::Publisher<as2_msgs::msg::AlertEvent>::SharedPtr alert_pub_;
   std::shared_ptr<as2::motionReferenceHandlers::HoverMotion> hover_handler_;
